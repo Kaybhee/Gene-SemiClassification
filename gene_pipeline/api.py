@@ -30,6 +30,7 @@ logger = logging.getLogger("gene_api")
 
 
 def safe_load(path: Path):
+    
     if not path.exists():
         raise FileNotFoundError(f"Required file not found: {path}")
     return joblib.load(path)
