@@ -8,6 +8,12 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import pandas as pd
 import io
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import HTMLResponse
+app = FastAPI()
+
+
+
 
 
 try:
@@ -17,7 +23,6 @@ except Exception:
 
 import joblib
 
-app = FastAPI()
 # Allow CORS from local frontends. Use a restrictive list in production.
 app.add_middleware(
     CORSMiddleware,
@@ -27,6 +32,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 logger = logging.getLogger("gene_api")
+
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
 def safe_load(path: Path):
@@ -97,10 +104,16 @@ async def log_requests(request: Request, call_next):
         raise
 
 
-@app.get("/")
-def root():
-    return {"status": "ok", "message": "Gene signature API. POST to /classify with form field 'sample'"}
-
+# @app.get("/")
+# def root():
+#     return {"status": "ok", "message": "Gene signature API. POST to /classify with form field 'sample'"}
+# Serve frontend index.html
+@app.get("/", response_class=HTMLResponse)
+def serve_frontend():
+    index_path = Path("static/index.html")
+    if index_path.exists():
+        return index_path.read_text()
+    return "<h2>index.html not found inside /static/</h2>"
 
 @app.post("/classify")
 async def classify_sample(sample: str = Form(...)):
