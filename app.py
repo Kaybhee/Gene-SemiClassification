@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import pandas as pd
 import io
+# For rendering static files, such as html and css files
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 app = FastAPI()
@@ -74,7 +75,6 @@ def load_models():
 
 
 def preprocess_text(text: str) -> str:
-    # Prefer nltk-based preprocessing if available, otherwise fallback
     try:
         import nltk
         from nltk.corpus import stopwords

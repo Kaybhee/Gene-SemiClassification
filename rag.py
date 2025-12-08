@@ -11,9 +11,6 @@ from typing import Dict, List, Optional
 
 logger = logging.getLogger("rag")
 
-# =============================================================================
-# CURATED GENE KNOWLEDGE BASE
-# =============================================================================
 GENE_KNOWLEDGE = {
     "MYC": {
         "symbol": "MYC",
