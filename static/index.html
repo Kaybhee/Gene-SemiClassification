@@ -1,176 +1,162 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Gene Signature Classifier</title>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 40px; background: #f7f7f7; }
-        .container { max-width: 800px; margin: auto; background: #fff; padding: 30px; border-radius: 8px; box-shadow: 0 2px 8px #ccc; }
-        h2 { text-align: center; }
-        textarea { width: 100%; height: 100px; margin-bottom: 15px; }
-        button { padding: 10px 20px; background: #007bff; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
-        .result { margin-top: 20px; padding: 15px; background: #e9ffe9; border-radius: 6px; }
-        .rag-box { margin-top: 15px; padding: 12px; background: #f0f8ff; border-left: 4px solid #0066cc; border-radius: 4px; }
-        .rag-box h4 { margin: 0 0 8px 0; color: #0066cc; }
-        .rag-box pre { background: #fff; padding: 8px; border-radius: 3px; overflow-x: auto; font-size: 0.85em; max-height: 300px; }
-        table { border-collapse: collapse; width: 100%; }
-        table th, table td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-        table th { background: #007bff; color: #fff; }
-        .expandable { cursor: pointer; color: #0066cc; text-decoration: underline; }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gene Signature Classifier</title>
+  <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body>
-    <div class="container">
-        <h2>Gene Signature Classifier</h2>
-        <form id="classifyForm">
-            <label for="sample">Paste molecular sample (text):</label><br>
-            <textarea id="sample" name="sample" required></textarea><br>
-            <button type="submit">Classify</button>
-        </form>
-        <div id="result" class="result" style="display:none;"></div>
-        <div id="error" style="display:none; margin-top:12px; color:#900;"></div>
-        <hr style="margin:20px 0;" />
-        <h3>CSV Batch Prediction</h3>
-        <p>Upload a CSV containing a <code>feature</code> column or text columns to generate per-row predictions.</p>
-        <input id="csvFile" type="file" accept=".csv" />
-        <button id="uploadCsvBtn">Upload CSV & Predict</button>
-        <div id="csvResult" style="display:none; margin-top:12px;"></div>
+<body class="bg-gray-950 text-white font-sans min-h-screen flex flex-col items-center py-12">
+
+  <div class="w-full max-w-4xl bg-gray-900 rounded-2xl shadow-xl p-8">
+    <h2 class="text-3xl font-bold text-center text-blue-400 mb-6">Gene Signature Classifier</h2>
+    
+    <form id="classifyForm" class="mb-8">
+      <label for="sample" class="block mb-2 font-semibold">Paste molecular sample:</label>
+      <textarea id="sample" name="sample" required class="w-full p-3 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-400 mb-4"></textarea>
+      <button type="submit" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-medium py-3 rounded-full transition duration-200">Classify</button>
+    </form>
+
+    <div id="result" class="hidden mt-6 p-4 bg-green-900 rounded-lg"></div>
+    <div id="error" class="hidden mt-4 text-red-500 font-semibold"></div>
+
+    <hr class="my-8 border-gray-700" />
+
+    <h3 class="text-2xl font-bold text-blue-400 mb-4">CSV Batch Prediction</h3>
+    <p class="mb-4">Upload a CSV containing a <code class="bg-gray-700 px-1 py-0.5 rounded">feature</code> column or text columns to generate per-row predictions.</p>
+    <div class="flex flex-col md:flex-row gap-4 mb-4">
+      <input id="csvFile" type="file" accept=".csv" class="text-gray-900 p-2 rounded-lg flex-1"/>
+      <button id="uploadCsvBtn" class="bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-full transition duration-200">Upload & Predict</button>
     </div>
-    <script>
-        document.getElementById('classifyForm').onsubmit = async function(e) {
-            e.preventDefault();
-            document.getElementById('error').style.display = 'none';
-            const sample = document.getElementById('sample').value.trim();
-            if(!sample){
-                document.getElementById('error').textContent = 'Please provide a sample.';
-                document.getElementById('error').style.display = 'block';
-                return;
+    <div id="csvResult" class="hidden mt-4 overflow-x-auto"></div>
+  </div>
+
+  <script>
+    document.getElementById('classifyForm').onsubmit = async function(e) {
+      e.preventDefault();
+      document.getElementById('error').style.display = 'none';
+      const sample = document.getElementById('sample').value.trim();
+      if(!sample){
+        document.getElementById('error').textContent = 'Please provide a sample.';
+        document.getElementById('error').style.display = 'block';
+        return;
+      }
+      const resultEl = document.getElementById('result');
+      resultEl.style.display = 'block';
+      resultEl.innerHTML = '<em>Classifying…</em>';
+
+      try {
+        const formData = new FormData();
+        formData.append('sample', sample);
+        const response = await fetch('https://gene-semiclassification.onrender.com/classify', { method: 'POST', body: formData });
+
+        if(!response.ok){
+          const txt = await response.text();
+          throw new Error(`Server returned ${response.status}: ${txt}`);
+        }
+
+        const data = await response.json();
+        const raw = data.predicted_signature_raw ?? data.predicted_signature ?? 'unknown';
+        const mapped = data.predicted_signature ?? raw;
+        const conf = (data.confidence !== null && data.confidence !== undefined) ? Number(data.confidence) : null;
+        const genes = data.extracted_genes ?? [];
+        const ragInsights = data.rag_insights ? JSON.parse(data.rag_insights) : null;
+
+        let resultHtml = `
+          <p><strong>Predicted Signature (mapped):</strong> ${mapped}</p>
+          <p><strong>Predicted Signature (raw):</strong> ${raw}</p>
+          <p><strong>Confidence:</strong> ${conf !== null ? conf.toFixed(3) : 'N/A'}</p>
+          <p><strong>Extracted Genes:</strong> ${genes.length > 0 ? genes.join(', ') : 'None'}</p>
+        `;
+
+        if(ragInsights){
+          resultHtml += `
+            <div class="mt-4 p-4 bg-blue-900 rounded-lg border-l-4 border-blue-400">
+              <h4 class="font-bold text-blue-400 mb-2">🔬 Scientific Insights (RAG-Enhanced)</h4>
+              <p><strong>${ragInsights.profile_name}:</strong> ${ragInsights.profile_description}</p>
+          `;
+          if(ragInsights.summary){
+            resultHtml += `<p><strong>Summary:</strong> ${ragInsights.summary}</p>`;
+          }
+          if(ragInsights.inferred_contexts && ragInsights.inferred_contexts.length > 0){
+            resultHtml += `<p><strong>Biological Contexts:</strong> ${ragInsights.inferred_contexts.join('; ')}</p>`;
+          }
+          if(ragInsights.gene_annotations && ragInsights.gene_annotations.length > 0){
+            resultHtml += `<p><strong>Gene Annotations:</strong></p><ul class="list-disc ml-6">`;
+            for(const ann of ragInsights.gene_annotations){
+              resultHtml += `<li><strong>${ann.symbol}</strong> (${ann.full_name}) - Functions: ${ann.functions.join(', ')}</li>`;
             }
+            resultHtml += `</ul>`;
+          }
+          resultHtml += `</div>`;
+        }
 
-            const resultEl = document.getElementById('result');
-            resultEl.style.display = 'block';
-            resultEl.innerHTML = '<em>Classifying…</em>';
+        resultEl.innerHTML = resultHtml;
+      } catch(err){
+        document.getElementById('error').textContent = 'Error: ' + err.message;
+        document.getElementById('error').style.display = 'block';
+        resultEl.style.display = 'none';
+      }
+    };
 
-            try{
-                const formData = new FormData();
-                formData.append('sample', sample);
-                // const response = await fetch('http://127.0.0.1:8000/classify', {
-                const response = await fetch('https://gene-semiclassification.onrender.com/classify', {
-                    method: 'POST',
-                    body: formData
-                }); 
+    document.getElementById('uploadCsvBtn').onclick = async function(e){
+      e.preventDefault();
+      document.getElementById('error').style.display = 'none';
+      const f = document.getElementById('csvFile').files[0];
+      if(!f){
+        document.getElementById('error').textContent = 'Please choose a CSV file to upload.';
+        document.getElementById('error').style.display = 'block';
+        return;
+      }
+      const csvEl = document.getElementById('csvResult');
+      csvEl.style.display = 'block';
+      csvEl.innerHTML = '<em>Uploading and predicting…</em>';
 
-                if(!response.ok){
-                    const txt = await response.text();
-                    throw new Error(`Server returned ${response.status}: ${txt}`);
-                }
+      try {
+        const fd = new FormData();
+        fd.append('file', f);
+        const resp = await fetch('https://gene-semiclassification.onrender.com/predict', { method: 'POST', body: fd });
+        if(!resp.ok){
+          const txt = await resp.text();
+          throw new Error(`Server returned ${resp.status}: ${txt}`);
+        }
+        const j = await resp.json();
+        if(!j.results || !Array.isArray(j.results)){
+          csvEl.innerHTML = `<pre>${JSON.stringify(j, null, 2)}</pre>`;
+          return;
+        }
 
-                const data = await response.json();
-                const raw = data.predicted_signature_raw ?? data.predicted_signature ?? 'unknown';
-                const mapped = data.predicted_signature ?? raw;
-                const conf = (data.confidence !== null && data.confidence !== undefined) ? Number(data.confidence) : null;
-                const genes = data.extracted_genes ?? [];
-                const ragInsights = data.rag_insights ? JSON.parse(data.rag_insights) : null;
+        let html = `<p>Rows: ${j.n_rows}</p>`;
+        html += '<div class="overflow-x-auto"><table class="min-w-full text-white"><thead><tr class="bg-blue-500"><th class="p-2">Row</th><th class="p-2">Prediction</th><th class="p-2">Confidence</th><th class="p-2">Genes</th><th class="p-2">Biological Context</th></tr></thead><tbody>';
+        for(const r of j.results){
+          const prob = r.probability ? (Array.isArray(r.probability) ? r.probability.map(p=>p.toFixed? (typeof p==='number'? p.toFixed(3): p): p).join(', ') : (typeof r.probability === 'number' ? r.probability.toFixed(3) : JSON.stringify(r.probability))) : 'N/A';
+          const genes = r.extracted_genes ? r.extracted_genes.join(', ') : '';
+          const ragObj = r.rag_insights ? JSON.parse(r.rag_insights) : null;
+          const context = ragObj && ragObj.inferred_contexts ? ragObj.inferred_contexts.join('; ') : '';
+          const clickId = `row_${r.row}`;
+          html += `<tr class="border-b border-gray-700"><td class="p-2">${r.row}</td><td class="p-2 font-bold">${r.prediction}</td><td class="p-2">${prob}</td><td class="p-2">${genes}</td><td class="p-2"><span class="cursor-pointer text-blue-400 underline" id="expand_${clickId}">${context ? context.substring(0, 40) + '...' : 'None'}</span><div id="${clickId}" class="hidden mt-2 p-2 bg-blue-900 rounded">${ragObj ? JSON.stringify(ragObj, null, 2) : 'No insights'}</div></td></tr>`;
+        }
+        html += '</tbody></table></div>';
+        csvEl.innerHTML = html;
 
-                let resultHtml = `
-                    <b>Predicted Signature (mapped):</b> ${mapped} <br>
-                    <b>Predicted Signature (raw):</b> ${raw} <br>
-                    <b>Confidence:</b> ${conf !== null ? conf.toFixed(3) : 'N/A'} <br>
-                    <b>Extracted Genes:</b> ${genes.length > 0 ? genes.join(', ') : 'None'}
-                `;
-
-                if(ragInsights){
-                    resultHtml += `<div class="rag-box">
-                        <h4>🔬 Scientific Insights (RAG-Enhanced)</h4>
-                        <p><b>${ragInsights.profile_name}:</b> ${ragInsights.profile_description}</p>
-                    `;
-                    if(ragInsights.summary){
-                        resultHtml += `<p><b>Summary:</b> ${ragInsights.summary}</p>`;
-                    }
-                    if(ragInsights.inferred_contexts && ragInsights.inferred_contexts.length > 0){
-                        resultHtml += `<p><b>Biological Contexts:</b> ${ragInsights.inferred_contexts.join('; ')}</p>`;
-                    }
-                    if(ragInsights.gene_annotations && ragInsights.gene_annotations.length > 0){
-                        resultHtml += `<p><b>Gene Annotations:</b></p><ul>`;
-                        for(const ann of ragInsights.gene_annotations){
-                            resultHtml += `<li><b>${ann.symbol}</b> (${ann.full_name})<br/>Functions: ${ann.functions.join(', ')}</li>`;
-                        }
-                        resultHtml += `</ul>`;
-                    }
-                    resultHtml += `</div>`;
-                }
-
-                resultEl.innerHTML = resultHtml;
-            }catch(err){
-                document.getElementById('error').textContent = 'Error: ' + err.message;
-                document.getElementById('error').style.display = 'block';
-                resultEl.style.display = 'none';
-            }
-        };
-
-        document.getElementById('uploadCsvBtn').onclick = async function(e){
-            e.preventDefault();
-            document.getElementById('error').style.display = 'none';
-            const f = document.getElementById('csvFile').files[0];
-            if(!f){
-                document.getElementById('error').textContent = 'Please choose a CSV file to upload.';
-                document.getElementById('error').style.display = 'block';
-                return;
-            }
-
-            const csvEl = document.getElementById('csvResult');
-            csvEl.style.display = 'block';
-            csvEl.innerHTML = '<em>Uploading and predicting…</em>';
-
-            try{
-                const fd = new FormData();
-                fd.append('file', f);
-                // const resp = await fetch('http://127.0.0.1:8000/predict', { method: 'POST', body: fd });
-                const resp = await fetch('https://gene-semiclassification.onrender.com/predict', { method: 'POST', body: fd });
-                if(!resp.ok){
-                    const txt = await resp.text();
-                    throw new Error(`Server returned ${resp.status}: ${txt}`);
-                }
-                const j = await resp.json();
-                // render results
-                if(!j.results || !Array.isArray(j.results)){
-                    csvEl.innerHTML = `<pre>${JSON.stringify(j, null, 2)}</pre>`;
-                    return;
-                }
-                let html = `<p>Rows: ${j.n_rows}</p>`;
-                html += '<table border="1" cellpadding="6" style="border-collapse:collapse; width:100%;">';
-                html += '<tr><th>Row</th><th>Prediction</th><th>Confidence</th><th>Genes</th><th>Biological Context</th></tr>';
-                for(const r of j.results){
-                    const prob = r.probability ? (Array.isArray(r.probability) ? r.probability.map(p=>p.toFixed? (typeof p==='number'? p.toFixed(3): p): p).join(', ') : (typeof r.probability === 'number' ? r.probability.toFixed(3) : JSON.stringify(r.probability))) : 'N/A';
-                    const genes = r.extracted_genes ? r.extracted_genes.join(', ') : '';
-                    const ragObj = r.rag_insights ? JSON.parse(r.rag_insights) : null;
-                    const context = ragObj && ragObj.inferred_contexts ? ragObj.inferred_contexts.join('; ') : '';
-                    const clickId = `row_${r.row}`;
-                    html += `<tr><td>${r.row}</td><td><b>${r.prediction}</b></td><td>${prob}</td><td>${genes}</td><td><span class="expandable" id="expand_${clickId}">${context ? context.substring(0, 40) + '...' : 'None'}</span><div id="${clickId}" style="display:none; margin-top:8px; padding:8px; background:#f0f8ff; border-radius:3px;"><pre>${ragObj ? JSON.stringify(ragObj, null, 2) : 'No insights'}</pre></div></td></tr>`;
-                }
-                html += '</table>';
-                csvEl.innerHTML = html;
-                
-                // Attach click handlers for expandable RAG insights
-                for(const r of j.results){
-                    const clickId = `row_${r.row}`;
-                    const expandBtn = document.getElementById(`expand_${clickId}`);
-                    const detailDiv = document.getElementById(clickId);
-                    if(expandBtn && detailDiv){
-                        expandBtn.onclick = function(e){
-                            e.stopPropagation();
-                            detailDiv.style.display = detailDiv.style.display === 'none' ? 'block' : 'none';
-                            expandBtn.textContent = detailDiv.style.display === 'none' ? 'Show' : 'Hide';
-                        };
-                    }
-                }
-            }catch(err){
-                document.getElementById('error').textContent = 'CSV upload error: ' + err.message;
-                document.getElementById('error').style.display = 'block';
-                csvEl.style.display = 'none';
-            }
-        };
-    </script>
+        for(const r of j.results){
+          const clickId = `row_${r.row}`;
+          const expandBtn = document.getElementById(`expand_${clickId}`);
+          const detailDiv = document.getElementById(clickId);
+          if(expandBtn && detailDiv){
+            expandBtn.onclick = function(e){
+              e.stopPropagation();
+              detailDiv.classList.toggle('hidden');
+              expandBtn.textContent = detailDiv.classList.contains('hidden') ? 'Show' : 'Hide';
+            };
+          }
+        }
+      } catch(err){
+        document.getElementById('error').textContent = 'CSV upload error: ' + err.message;
+        document.getElementById('error').style.display = 'block';
+        csvEl.style.display = 'none';
+      }
+    };
+  </script>
 </body>
 </html>
